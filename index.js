@@ -1175,8 +1175,8 @@ function createArtistInstrumentList(artist, div) {
     duration: artist.lifeSpan.end - artist.lifeSpan.begin + 1,
   }
   const instrument = artist.child.instrument.sort((a, b) => a.name.localeCompare(b.name));
-  let table = `<h1>artist instruments</h1><table><col/>`;
-  for (let i = 0; i < (calender.duration + 1) * 2; i++) {
+  let table = `<h1>artist instruments</h1><table id="fixed"><col/>`;
+  for (let i = 0; i < (calender.duration) * 2; i++) {
     table += `<col/>`;
   }
 
@@ -1190,8 +1190,13 @@ function createArtistInstrumentList(artist, div) {
     for (let i = 0; i < instrument.length; i++) {
       if (instrument[i].groups.length > 0) {
         const groups = instrument[i].groups;
+
         for (let j = 0; j < groups.length; j++) {
-          table += `<tr><td>${instrument[i].name}</td>`;
+          if (j === 0) {
+            table += `<tr><td rowspan="${groups.length}">${instrument[i].name}</td>`;
+          } else {
+            table += `<tr>`;
+          }
           for (let k = 0; k < groups[j].length; k++) {
             if (k == 0) {
               if (groups[j][k].begin == calender.begin) {
@@ -1210,6 +1215,10 @@ function createArtistInstrumentList(artist, div) {
                 table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 2)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
               }
             }
+            if (k === groups[j].length - 1) {
+                table += `<td colspan="${((calender.end - groups[j][groups[j].length - 1].end)*2)+1}"></td>`;
+            }
+
           }
         }
         table += `</tr>`;
