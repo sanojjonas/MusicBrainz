@@ -1,0 +1,33 @@
+table,
+tr,
+td {
+  border: 1px solid black;
+}
+
+td {
+  width: 0.1px;
+}
+
+table.fixed {
+  table-layout: fixed;
+}
+
+table.fixed td {
+  overflow: hidden;
+}
+
+#liked {
+  background-color: aqua;
+}
+
+#first {
+  width: 500px;
+}
+
+#mbId {
+  width: 30em;
+}
+
+#founder {
+  background-color: chartreuse;
+}
