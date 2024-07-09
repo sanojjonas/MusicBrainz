@@ -226,12 +226,17 @@ async function fetchFamily(item3, json, div = "events2") {
       let url;
       let item2 = item;
       let itemValue = {};
-      if (item.begin === null) {
-        item.begin = new Date().getFullYear();
+      if (item.begin != null) {
+        if (item.begin.split("-")[1]) {
+          item.begin = item.begin.split("-")[0];
+        }
       }
-      if (item.end === null) {
-        item.end = new Date().getFullYear();
+      if (item.end != null) {
+        if (item.end.split("-")[1]) {
+          item.end = item.end.split("-")[0];
+        }
       }
+
       if (item.event) {
         type = 'event';
         url = item.event;
@@ -239,8 +244,8 @@ async function fetchFamily(item3, json, div = "events2") {
           name: item.event.name,
           id: item.event.id,
           lifeSpan: {
-            begin: +item.begin,
-            end: +item.end
+            begin: item.begin,
+            end: item.end
           },
           founder: false,
           child: {
@@ -264,8 +269,8 @@ async function fetchFamily(item3, json, div = "events2") {
           name: item.artist.name,
           id: item.artist.id,
           lifeSpan: {
-            begin: +item.begin,
-            end: +item.end
+            begin: item.begin,
+            end: item.end
           },
           founder: false,
           child: {
@@ -398,31 +403,29 @@ async function fetchFamily(item3, json, div = "events2") {
             && item.direction == "backward") {
             let begin = item.begin;
             let end = item.end;
-            if (item.begin === null) {
-              begin = new Date().getFullYear();
-            }
-            if (item.end === null) {
-              end = new Date().getFullYear();
-            }
-            if (item.attributes) {
-              for (let m = 0; m < item.attributes.length; m++) {
-                let instrument = {
-                  name: item.attributes[m],
-                  begin: +begin,
-                  end: +end
+            if (item['source-credit'] === "") {
+              if (item.attributes) {
+                for (let m = 0; m < item.attributes.length; m++) {
+
+                  let instrument = {
+                    name: item.attributes[m],
+                    begin: +begin,
+                    end: +end
+                  }
+                  itemValue.child.instrument.push(instrument);
                 }
-                itemValue.child.instrument.push(instrument);
+              }
+              const double = json.child.member.findIndex(a => a.id === itemValue.id);
+              if (double > -1) {
+                for (let n = 0; n < itemValue.child.instrument.length; n++) {
+                  json.child.member[double].child.instrument.push(itemValue.child.instrument[n]);
+                }
+              } else {
+                json.child.member.push(itemValue);
+                text2 += `member: ${itemValue.name}<br>`;
               }
             }
-            const double = json.child.member.findIndex(a => a.id === itemValue.id);
-            if (double > -1) {
-              for (let n = 0; n < itemValue.child.instrument.length; n++) {
-                json.child.member[double].child.instrument.push(itemValue.child.instrument[n]);
-              }
-            } else {
-              json.child.member.push(itemValue);
-              text2 += `member: ${itemValue.name}<br>`;
-            }
+
           }
           else if ((item.type == "member of band"
             || item.type == "collaboration"
@@ -700,19 +703,93 @@ function checkFestivalType(eventInfo, div) {
 }
 async function checkMemberFunction(artistInfo, div) {
   if (artistInfo.child.member.length > 0) {
-    const member = await artistInfo.child.member.sort((a, b) => { return a.lifeSpan.begin - b.lifeSpan.begin });
+    const member = artistInfo.child.member;
     for (let i = 0; i < member.length; i++) {
-      if (member[i].lifeSpan.begin < artistInfo.lifeSpan.begin) {
-        artistInfo.lifeSpan.begin = member[i].lifeSpan.begin;
-      }
-      if (member[i].lifeSpan.end > artistInfo.lifeSpan.end) {
-        artistInfo.lifeSpan.end = member[i].lifeSpan.end;
+      if (member[i].child.instrument.length > 0) {
+        const instrument = member[i].child.instrument;
+        for (let j = 0; j < instrument.length; j++) {
+          let begin = instrument[j].begin;
+          let end = instrument[j].end;
+          if (begin < artistInfo.lifeSpan.begin) {
+            artistInfo.lifeSpan.begin = begin;
+          }
+          if (end > artistInfo.lifeSpan.end) {
+            artistInfo.lifeSpan.end = end;
+          }
+          if (begin === 0) {
+            begin = artistInfo.lifeSpan.begin;
+          }
+          if (end === 0) {
+            end = artistInfo.lifeSpan.end;
+          }
+          const instrumentValue = {
+            name: instrument[j].name,
+            member: [
+              {
+                name: member[i].name,
+                begin: begin,
+                end: end
+              }
+            ]
+          };
+          if (instrument[j].name == "original") {
+          } else {
+            const double = artistInfo.child.instrument.findIndex(a => a.name === instrument[j].name);
+            if (double > -1) {
+              artistInfo.child.instrument[double].member.push(instrumentValue.member[0]);
+            } else {
+              artistInfo.child.instrument.push(instrumentValue);
+            }
+          }
+
+        }
       }
     }
   }
-  console.log(artistInfo);
-  createArtistMemberList(artistInfo, div);
+  sortInstruments(artistInfo);
+  createArtistInstrumentList(artistInfo, div);
 }
+async function sortInstruments(artist) {
+  if (artist.child.instrument.length > 0) {
+    const instrument = artist.child.instrument;
+    for (let i = 0; i < instrument.length; i++) {
+      let group = []
+      if (instrument[i].member.length > 0) {
+        const member = instrument[i].member.sort((a, b) => {
+          if (a.begin == b.begin) {
+            return b.end - a.end;
+          } else {
+            return a.begin - b.begin;
+          }
+        })
+        const memLen = member.length
+        for (let k = 0; k <= memLen; k++) {
+          for (let j = 0; j < group.length; j++) {
+            if (group[j].length > 0) {
+              if (group[j][group[j].length - 1].end <= member[0].begin) {
+                group[j].push(member[0]);
+                member.splice(0, 1);
+                break;
+              }
+            }
+            else {
+              group.push([member[0]]);
+              member.splice(0, 1);
+              break;
+            }
+          }
+          if (member.length != memLen - k) {
+            group.push([member[0]]);
+            member.splice(0, 1);
+          }
+
+        }
+      }
+      instrument[i].groups = group;
+    }
+  }
+}
+
 async function eventstuff(type, id, full, div) {
   if (busy === false) {
     busy = true;
@@ -796,6 +873,7 @@ async function artiststuff(type, id, full, div) {
         event: [],
         member: [],
         artist: [],
+        instrument: [],
         other: []
       }
     }
@@ -1088,6 +1166,62 @@ async function createArtistBandList(artist, div) {
   updateText("events", newArtistList);
   updateText(div, table);
 }
+
+function createArtistInstrumentList(artist, div) {
+  //console.log(artist);
+  const calender = {
+    begin: artist.lifeSpan.begin,
+    end: artist.lifeSpan.end,
+    duration: artist.lifeSpan.end - artist.lifeSpan.begin + 1,
+  }
+  const instrument = artist.child.instrument.sort((a, b) => a.name.localeCompare(b.name));
+  let table = `<h1>artist instruments</h1><table><col/>`;
+  for (let i = 0; i < (calender.duration + 1) * 2; i++) {
+    table += `<col/>`;
+  }
+
+  table += `<tr><td><b>${artist.name}</b></td>`
+  for (let i = 0; i < calender.duration; i++) {
+    table += `<td colspan="2">${calender.begin + i}</td>`;
+  }
+
+  table += `</tr>`;
+  if (instrument.length > 0) {
+    for (let i = 0; i < instrument.length; i++) {
+      if (instrument[i].groups.length > 0) {
+        const groups = instrument[i].groups;
+        for (let j = 0; j < groups.length; j++) {
+          table += `<tr><td>${instrument[i].name}</td>`;
+          for (let k = 0; k < groups[j].length; k++) {
+            if (k == 0) {
+              if (groups[j][k].begin == calender.begin) {
+                table += `<td></td>`;
+                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 2)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+              } else {
+                table += `<td colspan="${((groups[j][k].begin - calender.begin) * 2) + 1}"></td>`;
+                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 2)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+              }
+            }
+            else {
+              if ((groups[j][k].begin == groups[j][k - 1].end)) {
+                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 2)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+              } else {
+                table += `<td colspan="${(groups[j][k].begin - groups[j][k - 1].end) * 2}"></td>`;
+                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 2)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+              }
+            }
+          }
+        }
+        table += `</tr>`;
+      }
+    }
+  }
+  else {
+    table += `<tr><td>no instruments yet</td></tr>`
+  }
+  table += `</table>`;
+  updateText(div, table);
+}
 async function createArtistMemberList(artist, div) {
   let table = `<h1>artists members</h1><table><col/>`;
   let artistList = [];
@@ -1137,7 +1271,6 @@ async function createArtistMemberList(artist, div) {
 
         table += `</tr>`
       }
-      //table += '</tr>'
     }
   }
   else {

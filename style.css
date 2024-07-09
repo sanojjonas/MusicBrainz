@@ -4,6 +4,10 @@ td {
   border: 1px solid black;
 }
 
+col {
+  width: 5px
+}
+
 td {
   width: 0.1px;
 }
