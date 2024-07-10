@@ -214,11 +214,14 @@ async function fetchMusicBrainzExtended(type, id, includes) {
     throw new Error('woepsedaisy');
   }
   let json = await data.json()
+  //console.log(musicbrainzUrl);
+  //console.log(json);
   return json
 }
 
 async function fetchFamily(item3, json, div = "events2") {
   let count = -1;
+  console.log(item3)
   if (item3.relations) {
     for (let i = 0; i < item3.relations.length; i++) {
       let item = item3.relations[i];
@@ -226,16 +229,6 @@ async function fetchFamily(item3, json, div = "events2") {
       let url;
       let item2 = item;
       let itemValue = {};
-      if (item.begin != null) {
-        if (item.begin.split("-")[1]) {
-          item.begin = item.begin.split("-")[0];
-        }
-      }
-      if (item.end != null) {
-        if (item.end.split("-")[1]) {
-          item.end = item.end.split("-")[0];
-        }
-      }
 
       if (item.event) {
         type = 'event';
@@ -243,10 +236,7 @@ async function fetchFamily(item3, json, div = "events2") {
         itemValue = {
           name: item.event.name,
           id: item.event.id,
-          lifeSpan: {
-            begin: item.begin,
-            end: item.end
-          },
+          lifeSpan: {},
           founder: false,
           child: {
             event: [],
@@ -268,10 +258,7 @@ async function fetchFamily(item3, json, div = "events2") {
         itemValue = {
           name: item.artist.name,
           id: item.artist.id,
-          lifeSpan: {
-            begin: item.begin,
-            end: item.end
-          },
+          lifeSpan: checkLifeSpan(item),
           founder: false,
           child: {
             event: [],
@@ -401,16 +388,20 @@ async function fetchFamily(item3, json, div = "events2") {
           else if ((item.type == "member of band"
             || item.type == "supporting musician")
             && item.direction == "backward") {
-            let begin = item.begin;
-            let end = item.end;
+            //let begin = item.lifeSpan.begin;
+            //let end = item.lifeSpan.end;
             if (item['source-credit'] === "") {
               if (item.attributes) {
                 for (let m = 0; m < item.attributes.length; m++) {
-
+                  const lifeSpan = await checkLifeSpan({
+                    begin: item.begin,
+                    end: item.end,
+                    ended: item.ended
+                  })
                   let instrument = {
                     name: item.attributes[m],
-                    begin: +begin,
-                    end: +end
+                    begin: lifeSpan.begin,
+                    end: lifeSpan.end
                   }
                   itemValue.child.instrument.push(instrument);
                 }
@@ -710,18 +701,6 @@ async function checkMemberFunction(artistInfo, div) {
         for (let j = 0; j < instrument.length; j++) {
           let begin = instrument[j].begin;
           let end = instrument[j].end;
-          if (begin < artistInfo.lifeSpan.begin) {
-            artistInfo.lifeSpan.begin = begin;
-          }
-          if (end > artistInfo.lifeSpan.end) {
-            artistInfo.lifeSpan.end = end;
-          }
-          if (begin === 0) {
-            begin = artistInfo.lifeSpan.begin;
-          }
-          if (end === 0) {
-            end = artistInfo.lifeSpan.end;
-          }
           const instrumentValue = {
             name: instrument[j].name,
             member: [
@@ -788,6 +767,54 @@ async function sortInstruments(artist) {
       instrument[i].groups = group;
     }
   }
+}
+async function lifeSpanNumber(lifeSpan) {
+  let newLifeSpan = {}
+  if (lifeSpan.begin === null) {
+    newLifeSpan.begin = 0;
+  } else if (lifeSpan.begin.split("-")[1]) {
+    newLifeSpan.begin = +lifeSpan.begin.split("-")[0];
+  } else {
+    newLifeSpan.begin = +lifeSpan.begin;
+  }
+  if (lifeSpan.end === null) {
+    newLifeSpan.end = 0;
+  } else if (lifeSpan.end.split("-")[1]) {
+    newLifeSpan.end = +lifeSpan.end.split("-")[0];
+  } else {
+    newLifeSpan.end = +lifeSpan.end;
+  }
+  newLifeSpan.ended = lifeSpan.ended;
+
+  return newLifeSpan;
+}
+
+async function checkLifeSpan(fetched) {
+  let fetchedLifeSpan;
+  if (fetched['life-span']) {
+    fetchedLifeSpan = await lifeSpanNumber(fetched['life-span']);
+  } else {
+    fetchedLifeSpan = await lifeSpanNumber({
+      begin: fetched.begin,
+      end: fetched.end,
+      ended: fetched.ended
+    })
+  }
+  const yearNow = new Date().getFullYear();
+  let newLifeSpan = {};
+
+  if (fetchedLifeSpan.begin === 0) {
+    newLifeSpan.begin = yearNow;
+  } else {
+    newLifeSpan.begin = fetchedLifeSpan.begin;
+  }
+  if (fetchedLifeSpan.end === 0) {
+    newLifeSpan.end = yearNow;
+  } else {
+    newLifeSpan.end = fetchedLifeSpan.end;
+  }
+  newLifeSpan.ended = fetchedLifeSpan.ended;
+  return newLifeSpan;
 }
 
 async function eventstuff(type, id, full, div) {
@@ -862,7 +889,7 @@ async function artiststuff(type, id, full, div) {
     artistInfo = {
       name: artist.name,
       id: artist.id,
-      lifeSpan: artist['life-span'],
+      lifeSpan: {},
       parent: {
         event: [],
         series: [],
@@ -877,22 +904,14 @@ async function artiststuff(type, id, full, div) {
         other: []
       }
     }
-    if (artistInfo.lifeSpan.begin === null) {
-      artistInfo.lifeSpan.begin = new Date().getFullYear();
-    } else {
-      artistInfo.lifeSpan.begin = +artistInfo.lifeSpan.begin;
-    }
-    if (artistInfo.lifeSpan.end === null) {
-      artistInfo.lifeSpan.end = new Date().getFullYear();
-    } else {
-      artistInfo.lifeSpan.end = +artistInfo.lifeSpan.end;
-    }
+    artistInfo.lifeSpan = await checkLifeSpan(artist);
     await fetchFamily(artist, artistInfo, div);
     checkMemberFunction(artistInfo, "container2");
     if (full === true) {
       await fetchArtistFamily(artistInfo, div);
       //createArtistEventList(artistInfo, "container4");
     }
+    console.log(artistInfo);
     text += " done";
     updateText("load", text);
     busy = false;
@@ -1032,7 +1051,6 @@ async function createSchedule(festival, div) {
   scrollToTarget(div);
 }
 async function createList(festival, div) {
-  console.log(festival);
   let table = `<H1>list</H1><table>`;
   let cssId = "artist";
   let eventChild
@@ -1168,21 +1186,22 @@ async function createArtistBandList(artist, div) {
 }
 
 function createArtistInstrumentList(artist, div) {
-  //console.log(artist);
+  console.log(artist);
   const calender = {
     begin: artist.lifeSpan.begin,
     end: artist.lifeSpan.end,
     duration: artist.lifeSpan.end - artist.lifeSpan.begin + 1,
   }
+  console.log(calender)
   const instrument = artist.child.instrument.sort((a, b) => a.name.localeCompare(b.name));
-  let table = `<h1>artist instruments</h1><table id="fixed"><col/>`;
-  for (let i = 0; i < (calender.duration) * 2; i++) {
+  let table = `<h1>artist instruments</h1><table id="fixed"><ol/>`;
+  for (let i = 0; i < (calender.duration) * 4; i++) {
     table += `<col/>`;
   }
 
   table += `<tr><td><b>${artist.name}</b></td>`
   for (let i = 0; i < calender.duration; i++) {
-    table += `<td colspan="2">${calender.begin + i}</td>`;
+    table += `<td colspan="4">${calender.begin + i}</td>`;
   }
 
   table += `</tr>`;
@@ -1198,27 +1217,114 @@ function createArtistInstrumentList(artist, div) {
             table += `<tr>`;
           }
           for (let k = 0; k < groups[j].length; k++) {
-            if (k == 0) {
+            if (k === 0) {
+              //eerst
               if (groups[j][k].begin == calender.begin) {
-                table += `<td></td>`;
-                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 2)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                //eerste = begin calender
+                if (groups[j][k].end == calender.end) {
+                  //eerste = begin calender && laatste = einde calender
+                  table += `<td colspan="${((groups[j][k].end - groups[j][k].begin + 1) * 4)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                } else {
+                  //eerste = begin calender && einde != einde calender
+                  if (groups[j].length>1) {
+                    //er zijn volgende
+                    table += `<td colspan="${((groups[j][k].end - groups[j][k].begin + 1) * 4)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                  } else {
+                    //geen volgende
+                    table += `<td colspan="${((groups[j][k].end - groups[j][k].begin + 1) * 4)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                    table += `<td colspan="${(calender.end - groups[j][k].end) * 4}></td>`
+                  }
+
+                }
               } else {
-                table += `<td colspan="${((groups[j][k].begin - calender.begin) * 2) + 1}"></td>`;
-                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 2)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                //eerste != begin calender
+                table += `<td colspan="${((groups[j][k].begin - calender.begin) * 4)}"></td>`; //empty voor eerste event
+                if (k < groups[j].length - 1) {
+                  //er is een volgende
+                  if (groups[j][k].end == groups[j][k + 1].begin) {
+                    //als einde  = volgende begin
+                    if (groups[j][k + 1].begin == groups[j][k + 1].end) {
+                      //volgend is 1 jaar lang
+                      table += `<td><b>memmen</b></td>`
+                    } else {
+                      //volgende is langer dan 1 jaar
+                      table += `<td colspan="${(((groups[j][k].end - groups[j][k].begin) + 1) * 4) - 2}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                    }
+                  } else {
+                    //volgende einde != begin
+                    table += `<td colspan="${(((groups[j][k].end - groups[j][k].begin) + 1) * 4)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                  }
+                } else {
+                  //er is geen volgende
+                  table += `<td colspan="${(((groups[j][k].end - groups[j][k].begin) + 1) * 4)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                  if (groups[j][k].end == calender.end) {
+                    //do nothing on end of calander
+                  } else {
+                    table += `<td colspan="${(calender.end - groups[j][k].end) * 4}"></td>`
+                  }
+                }
+
               }
             }
             else {
-              if ((groups[j][k].begin == groups[j][k - 1].end)) {
-                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 2)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+              // niet eerst
+              if (groups[j][k].begin == groups[j][k - 1].end) {
+                //begin = einde vorige
+                if (k < groups[j].length - 1) {
+                  //er is een volgende
+                  if (groups[j][k].end == groups[j][k + 1].begin) {
+                    //einde = begin volgende
+                    table += `<td colspan="${(groups[j][k].end - groups[j][k].begin) * 4}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                  } else {
+                    //einde != begin volgende
+                    if (groups[j][k].begin == groups[j][k].end) {
+                      table += `<td colspan="2">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                    } else {
+                      table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 4)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                    }
+                  }
+
+                } else {
+                  //er is geen volgende
+                  table += `<td colspan="${(((groups[j][k].end - groups[j][k].begin) + 1) * 4) - 2}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                }
+              }
+              else {
+                //begin != einde voirge
+                if ((groups[j][k].begin - 1) == groups[j][k - 1].end) {
+                  //no space when years follow
+                } else {
+                  table += `<td colspan="${((groups[j][k].begin - groups[j][k - 1].end - 1) * 4)}"></td>`;
+                }
+                if (k < groups[j].length - 1) {
+                  //er is een volgende
+                  if (groups[j][k].end == groups[j][k + 1].begin) {
+                    //einde = begin volgende
+                    table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 4) + 2}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                  } else {
+                    //einde != begin volgende
+                    table += `<td>${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                  }
+                } else {
+                  //er is geen volgende
+                  table += `<td colspan="${(((groups[j][k].end - groups[j][k].begin) + 1) * 4)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                }
+              }
+
+
+
+              //niet eerste
+              /*if ((groups[j][k].begin == groups[j][k - 1].end)) {
+                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 4) + 2}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
               } else {
-                table += `<td colspan="${(groups[j][k].begin - groups[j][k - 1].end) * 2}"></td>`;
-                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 2)}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+                table += `<td colspan="${(groups[j][k].begin - groups[j][k - 1].end) * 4}"></td>`;
+                table += `<td colspan="${((groups[j][k].end - groups[j][k].begin) * 4) - 1}">${groups[j][k].name} ${groups[j][k].begin}-${groups[j][k].end}</td>`;
+              }
+            }*/
+              if (k === groups[j].length - 1) {
+                // table += `<td colspan="${((calender.end - groups[j][groups[j].length - 1].end) * 4) + 2}"></td>`;
               }
             }
-            if (k === groups[j].length - 1) {
-                table += `<td colspan="${((calender.end - groups[j][groups[j].length - 1].end)*2)+1}"></td>`;
-            }
-
           }
         }
         table += `</tr>`;
