@@ -15,17 +15,22 @@
   <table>
     <tr>
       <td>
-        <input type="checkbox" id="checkbox"><button id="event" onclick="manualGet('event')">event</button><button id="user" onclick="manualGet('artist')">artist</button><input type="text" id="mbId">
+        <input type="checkbox" id="checkbox">
+        <button id="event" onclick="manualGet('event')">event</button>
+        <button id="user" onclick="manualGet('artist')">artist</button>
+        <button id="user" onclick="manualGet('series')">serie</button>
+        <input type="text" id="mbId">
       </td>
       <td>
-        <- paste event mbId here to search
-      </td>
+        <- paste event mbId here to search </td>
     </tr>
     <tr>
       <td id="first">
         <div id="series"></div>
       </td>
-      <td id="first"><div id="load"></div></td>
+      <td id="first">
+        <div id="load"></div>
+      </td>
     </tr>
     <tr>
       <td>
@@ -33,7 +38,7 @@
       </td>
       <td>
         <div id="events2"></div>
-        
+
       </td>
     </tr>
   </table>

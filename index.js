@@ -73,6 +73,10 @@ const user = {
       {
         name: "Rock Herk 2024",
         id: "186ad33b-74ad-40a6-9df0-afc31c5cd6f3"
+      },
+      {
+        name: "Rock Olmen 2024",
+        idd: "	1f386c04-8751-4ce6-be70-f4135c0b9104"
       }
     ]
   },
@@ -790,6 +794,7 @@ async function lifeSpanNumber(lifeSpan) {
 }
 
 async function checkLifeSpan(fetched) {
+  console.log(fetched)
   let fetchedLifeSpan;
   if (fetched['life-span']) {
     fetchedLifeSpan = await lifeSpanNumber(fetched['life-span']);
