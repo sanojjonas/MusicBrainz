@@ -267,6 +267,13 @@ function getValues(item) {
       })
     }
   }
+  if (item.type == "Festival") {
+    json.lifeSpan = {
+      ...json.lifeSpan,
+      startTime: 20 * 60,
+      endTime: 20 * 60
+    }
+  }
   return json;
 }
 
@@ -274,18 +281,64 @@ function sortItems(item, json) {
   const relation = item.relations;
   for (let i = 0; i < relation.length; i++) {
     const itemValue = getValues(relation[i]);
+    if (relation[i]['attribute-values'].time) {
+      const time = relation[i]['attribute-values'].time;
+      if (time != "") {
+        let startHour = 0;
+        let startMinute = 0;
+        let startTime = 0;
+        let endHour = 0;
+        let endMinute = 0;
+        let endTime = 0;
+        if (time.split(" - ")[1]) {
+          startHour = +time.split(" - ")[0].split(":")[0];
+          startMinute = +time.split(" - ")[0].split(":")[1];
+          startTime = (startHour * 60) + startMinute;
+          endHour = +time.split(" - ")[1].split(":")[0];
+          endMinute = +time.split(" - ")[1].split(":")[1];
+          endTime = (endHour * 60) + endMinute;
+        } else {
+          startHour = +time.split(":")[0];
+          startMinute = +time.split(":")[1];
+          start = (startHour * 60) + startMinute;
+          end = start + 30;
+          startHour = ~~(end / 60);
+          startMinute = end % 60;
+        }
+        if (startHour < 6) {
+          startTime = ((startHour + 24) * 60) + startMinute;
+        }
+        if (endHour < 6) {
+          endTime = ((endHour + 24) * 60) + endMinute;
+        }
+        itemValue.lifeSpan = {
+          ...itemValue.lifeSpan,
+          startTime: startTime,
+          startHour: startHour,
+          startMinute: startMinute,
+          endTime: endTime,
+          endHour: endHour,
+          endMinute: endMinute
+        }
+      }
+
+    }
     if ((relation[i].type == "founder"
       || relation[i].type == "member of band"
       || relation[i].type == "instrumental supporting musician")
       && relation[i].direction == "backward") {
       //child member
-      const double = json.child.member.findIndex(a => a.id === itemValue.id);
-      if (double > -1) {
-        for (let j = 0; j < itemValue.child.instrument.length; j++) {
-          json.child.member[double].child.instrument.push(itemValue.child.instrument[j]);
-        }
+      if (relation[i]['source-credit'] != "") {
+        console.log("TODO add source credit stuff")
       } else {
-        json.child.member.push(itemValue);
+        const double = json.child.member.findIndex(a => a.id === itemValue.id);
+        if (double > -1) {
+          for (let j = 0; j < itemValue.child.instrument.length; j++) {
+            json.child.member[double].child.instrument.push(itemValue.child.instrument[j]);
+          }
+        } else {
+          json.child.member.push(itemValue);
+        }
       }
     }
     else if ((relation[i].type == "founder"
@@ -315,7 +368,7 @@ function sortItems(item, json) {
       || relation[i].type == "tribute")
       && relation[i].direction == "backward") {
       //child artist (from other artist)
-      json.child.artist.push(getValues(relation[i]));
+      json.child.artist.push(itemValue);
     }
     else if ((relation[i].type == "main performer"
       || relation[i].type == "support act"
@@ -323,17 +376,17 @@ function sortItems(item, json) {
       || relation[i].type == "tribute to")
       && relation[i].direction == "forward") {
       //event parent (of member)
-      json.parent.event.push(getValues(relation[i]));
+      json.parent.event.push(itemValue);
     }
     else if ((relation[i].type == "parts")
       && relation[i].direction == "backward") {
       //event parent (of other event)
-      json.parent.event.push(getValues(relation[i]));
+      json.parent.event.push(itemValue);
     }
     else if ((relation[i].type == "parts")
       && relation[i].direction == "forward") {
       //event child (of other event)
-      json.child.event.push(getValues(relation[i]));
+      json.child.event.push(itemValue);
     }
     else if ((relation[i].type == "engineer position"
       || relation[i].type == "held at")
@@ -378,6 +431,7 @@ async function checkDeeper(type, json) {
 
 async function grabStuff(type, id, full) {
   if (busy === false) {
+    //try {
     busy = true;
     count = 0;
     updateText("right", "");
@@ -391,11 +445,12 @@ async function grabStuff(type, id, full) {
         case "artist":
           await checkDeeper("member", json);
           generateMemberArtistList(json);
-          generateMemberInstrumentTable(json);
+          generateMemberInstrumentSchedule(json);
           break;
         case "event":
           await checkDeeper("event", json);
           generateEventList(json, [], []);
+          generateEventSchedule(json);
           break;
         default:
           throw new Error("add extra full get stuff");
@@ -404,10 +459,10 @@ async function grabStuff(type, id, full) {
     else {
       switch (type) {
         case "artist":
-          generateMemberInstrumentTable(json);
+          generateMemberInstrumentSchedule(json);
           break;
         case "event":
-          throw new Error("event fetch get stuff");
+          generateEventList(json, [], []);
           break;
         default:
           throw new Error("add extra fetch get stuff");
@@ -418,13 +473,18 @@ async function grabStuff(type, id, full) {
     updateText("load", count);
     //console.log(json);
     busy = false;
+    /* } catch (err) {
+       updateText("load", "ERROR");
+       updateText("bottom1", err);
+       throw new Error(err);
+       busy = false;
+     }*/
   } else {
     console.log("do nothing when busy");
   }
 }
 
 function generateMemberArtistList(json) {
-  console.log(json)
   let list = [];
   if (json.child.member.length > 0) {
     const member = json.child.member;
@@ -447,7 +507,6 @@ function generateMemberArtistList(json) {
 }
 
 function generateEventList(json, eventList, artistList) {
-  console.log(json)
   if (json.child.artist.length > 0) {
     const artistChild = json.child.artist;
     for (let j = 0; j < artistChild.length; j++) {
@@ -465,6 +524,7 @@ function generateEventList(json, eventList, artistList) {
   itemList("event", eventList, "right");
   itemList("artist", artistList, "right2");
 }
+
 function sortInstruments(json) {
   const artistInstrument = json.child.instrument;
   if (json.child.member.length > 0) {
@@ -493,18 +553,388 @@ function sortInstruments(json) {
             }
           }
         }
-
       }
     }
   }
   artistInstrument.sort((a, b) => a.name.localeCompare(b.name));
+  groupInstruments(json);
+}
+function groupInstruments(json) {
+  if (json.child.instrument.length > 0) {
+    const instrument = json.child.instrument;
+    for (let i = 0; i < instrument.length; i++) {
+      let group = [];
+      if (instrument[i].member.length > 0) {
+        const member = instrument[i].member.sort((a, b) => {
+          if (a.lifeSpan.begin == b.lifeSpan.begin) {
+            return b.lifeSpan.end - a.lifeSpan.end;
+          }
+          else {
+            return a.lifeSpan.begin - b.lifeSpan.begin;
+          }
+        })
+        const memberLegnth = member.length;
+        for (let k = 0; k <= memberLegnth; k++) {
+          for (let j = 0; j < group.length; j++) {
+            if (group[j].length > 0) {
+              if (group[j][group[j].length - 1].lifeSpan.end <= member[0].lifeSpan.begin) {
+                group[j].push(member[0]);
+                member.splice(0, 1);
+                break;
+              }
+            }
+            else {
+              group.push([member[0]]);
+              member.splice(0, 1);
+            }
+          }
+          if (member.length != memberLegnth - k) {
+            group.push([member[0]]);
+            member.splice(0, 1)
+          }
+        }
+      }
+      instrument[i].groups = group;
+    }
+  }
 }
 
-function generateMemberInstrumentTable(json) {
+function addItemToTable(text, length, preLength) {
+  let td = ""
+  if (preLength != 0) {
+    td += `<td colspan="${preLength}"></td>`;
+  }
+  if (length != 0) {
+    td += `<td colspan="${length}">`;
+    for (let i = 0; i < text.length; i++) {
+      td += text[i];
+    }
+    td += '</td>';
+  }
+  return td;
+}
+
+function generateMemberInstrumentSchedule(json) {
   sortInstruments(json);
-  console.log(json);
+  const calender = {
+    begin: json.lifeSpan.begin,
+    end: json.lifeSpan.end,
+    duration: json.lifeSpan.end - json.lifeSpan.begin
+  }
+  const instrument = json.child.instrument;
   let table = `<h1>Instrument Table</h1>`;
-  table += `<table>`;
+  table += `<table><col id="instrument"/>`;
+  for (let i = 0; i <= calender.duration * 4; i++) {
+    table += `<col id="instrument"/>`;
+  }
+  table += `<tr><td><b>${json.name}</b></td>`
+  for (let i = 0; i <= calender.duration; i++) {
+    table += `<td colspan="4">${calender.begin + i}</td>`;
+  }
+  table += `</tr>`;
+  if (instrument.length > 0) {
+    for (let i = 0; i < instrument.length; i++) {
+      if (instrument[i].groups.length > 0) {
+        const groups = instrument[i].groups;
+        for (let j = 0; j < groups.length; j++) {
+          if (j === 0) {
+            table += `<tr><td rowspan="${groups.length}">${instrument[i].name}</td>`;
+          }
+          else {
+            table += `<tr>`;
+          }
+          let text = [];
+          let length = 0;
+          let preLength = 0;
+          for (let k = 0; k < groups[j].length; k++) {
+            text = [
+              groups[j][k].name,
+              " ",
+              groups[j][k].lifeSpan.begin,
+              "-",
+              groups[j][k].lifeSpan.end
+            ];
+            if (groups[j][k].lifeSpan.begin == groups[j][k].lifeSpan.end) {
+              length = 4;
+            } else {
+              length = (groups[j][k].lifeSpan.end - groups[j][k].lifeSpan.begin) * 4;
+            }
+            if (groups[j][k].lifeSpan.begin != calender.begin) {
+              if (k == 0) {
+                preLength = (groups[j][k].lifeSpan.begin - calender.begin) * 4;
+              }
+            }
+            if (k > 0) {
+              if (groups[j][k].lifeSpan.begin == groups[j][k - 1].lifeSpan.end) {
+                preLength = 0;
+              } else if (groups[j][k].lifeSpan.begin - 1 == groups[j][k - 1].lifeSpan.end) {
+                preLength = 0;
+              }
+              else {
+                preLength = (groups[j][k].lifeSpan.begin - groups[j][k - 1].lifeSpan.end) * 4;
+              }
+            }
+            if (0 < k && k < groups[j].length - 1) {
+              if (groups[j][k].lifeSpan.end == groups[j][k + 1].lifeSpan.begin) {
+                if (groups[j][k].lifeSpan.begin == groups[j][k - 1].lifeSpan.end) {
+
+                } else {
+                  length = length + 2
+                }
+              }
+            }
+            if (groups[j][k].lifeSpan.ended == false) {
+              length = length + 1;
+            }
+            table += addItemToTable(text, length, preLength);
+            if (k == (groups[j].length - 1) && groups[j][k].lifeSpan.end != calender.end) {
+              table += addItemToTable([], 0, (calender.end - groups[j][k].lifeSpan.end + 1) * 4)
+            }
+          }
+        }
+        table += `</tr>`;
+      }
+    }
+  }
   table += `</table>`;
   table += ``;
+  updateText("bottom1", table);
+}
+
+function addArtistsToMainEvent(json) {
+  if (json.child.event.length > 0) {
+    const eventChild = json.child.event;
+    for (let i = 0; i < eventChild.length; i++) {
+      if (eventChild[i].child.event.length > 0) {
+        const eventChild2 = eventChild[i].child.event;
+        for (let j = 0; j < eventChild2.length; j++) {
+          if (eventChild2[j].child.artist.length > 0) {
+            const artist = eventChild2[j].child.artist;
+            for (let m = 0; m < artist.length; m++) {
+              artist[m].lifeSpan = {
+                ...artist[m].lifeSpan,
+                begin: eventChild2[j].lifeSpan.begin,
+                end: eventChild2[j].lifeSpan.end,
+                ended: eventChild2[j].lifeSpan.ended
+              }
+              const double = json.child.artist.findIndex(a => a.id === artist[m].id);
+              if (double > -1) {
+                json.child.artist[double] = artist[m];
+              }
+              else {
+                json.child.artist.push(artist[m]);
+              }
+              if (json.lifeSpan.startTime > artist[m].lifeSpan.startTime) {
+                json.lifeSpan.startTime = artist[m].lifeSpan.startTime;
+              }
+              if (json.lifeSpan.endTime < artist[m].lifeSpan.endTime) {
+                json.lifeSpan.endTime = artist[m].lifeSpan.endTime;
+              }
+            }
+          }
+        }
+      } else {
+        if (eventChild[i].child.artist.length > 0) {
+          const artist = eventChild[i].child.artist;
+          for (let m = 0; m < artist.length; m++) {
+            artist[m].lifeSpan = {
+              ...artist[m].lifeSpan,
+              begin: eventChild[i].lifeSpan.begin,
+              end: eventChild[i].lifeSpan.end,
+              ended: eventChild[i].lifeSpan.ended
+            }
+            const double = json.child.artist.findIndex(a => a.id === artist[m].id);
+            if (double > -1) { }
+            else {
+              artist[m].lifeSpan = {
+                ...artist[m].lifeSpan,
+                begin: json.lifeSpan.begin,
+                end: json.lifeSpan.end,
+                ended: json.lifeSpan.ended
+              }
+              json.child.artist.push(artist[m]);
+              if (json.lifeSpan.startTime > artist[m].lifeSpan.startTime) {
+                json.lifeSpan.startTime = artist[m].lifeSpan.startTime;
+              }
+              if (json.lifeSpan.endTime < artist[m].lifeSpan.endTime) {
+                json.lifeSpan.endTime = artist[m].lifeSpan.endTime;
+              }
+            }
+          }
+        }
+      }
+    }
+  } else {
+    if (json.child.artist.length > 0) {
+      const artist = json.child.artist;
+      for (let m = 0; m < artist.length; m++) {
+        const double = json.child.artist.findIndex(a => a.id === artist[m].id);
+        if (double > -1) {
+          json.child.artist[double] = artist[m];
+        }
+        else {
+          json.child.artist.push(artist[m]);
+        }
+        if (json.lifeSpan.startTime > artist[m].lifeSpan.startTime) {
+          json.lifeSpan.startTime = artist[m].lifeSpan.startTime;
+        }
+        if (json.lifeSpan.endTime < artist[m].lifeSpan.endTime) {
+          json.lifeSpan.endTime = artist[m].lifeSpan.endTime;
+        }
+      }
+
+    }
+  }
+}
+
+function checkEventName(event) {
+  let name = ""
+  if (event.name.split(": ")[1]) {
+    name = event.name.replace(event.parent.event[0].name + ": ", "")
+  }
+  else if (event.name.split(", ")[1]) {
+    name = event.name.replace(event.parent.event[0].name + ", ", "")
+  }
+  else {
+    name = event.name
+  }
+  return name
+}
+
+function addArtistStuffToSchedule(artistChild, calender) {
+  let table = ""
+  for (let k = 0; k < artistChild.length; k++) {
+    let artist = artistChild[k].name;
+    if (artistChild[k].lifeSpan.startTime != undefined) {
+      for (let l = 1; l < artistChild.length - k; l++) {
+        if (artistChild[k].lifeSpan.startTime == artistChild[k + l].lifeSpan.startTime) {
+          artist += " + " + artistChild[k + l].name;
+        }
+      }
+    }
+    let text = [
+      artist,
+      "<br>",
+      String(artistChild[k].lifeSpan.startHour).padStart(2, '0'),
+      ":",
+      String(artistChild[k].lifeSpan.startMinute).padStart(2, '0'),
+      " - ",
+      String(artistChild[k].lifeSpan.endHour).padStart(2, "0"),
+      ":",
+      String(artistChild[k].lifeSpan.endMinute).padStart(2, "0"),
+    ];
+    let length = artistChild[k].lifeSpan.endTime - artistChild[k].lifeSpan.startTime;
+    let preLength = 0;
+    if (k === 0) {
+      preLength = artistChild[k].lifeSpan.startTime - calender.startTime;
+    } else {
+      preLength = artistChild[k].lifeSpan.startTime - artistChild[k - 1].lifeSpan.endTime;
+    }
+    if (artistChild[k].lifeSpan.startTime == undefined) {
+      table += addItemToTable(
+        [artistChild[k].name],
+        1,
+        0
+      )
+    } else {
+      if (k > 0 && artistChild[k].lifeSpan.startTime == artistChild[k - 1].lifeSpan.startTime) {
+      }
+      else {
+        table += addItemToTable(
+          text,
+          length,
+          preLength
+        );
+      }
+      if (k == artistChild.length - 1) {
+        if (artistChild[k].lifeSpan.endTime != calender.endTime) {
+          table += addItemToTable([], 0, (calender.endTime - artistChild[k].lifeSpan.endTime))
+        }
+      }
+    }
+
+
+
+  }
+  table += `</tr>`;
+  return table;
+}
+
+function generateTimeHeader(calender, title) {
+  console.log(calender);
+  let table = ``;
+  if (calender.duration == 0) {
+    table += `<tr><td colspan="100%">No Time In Event</td>`;
+  } else {
+    table += `<tr><td>${title}</td>`
+    for (let j = 0; j < calender.duration; j++) {
+      if (calender.startHour + j < 24) {
+        table += `<td colspan="60">${String(calender.startHour + j).padStart(2, '0')}</td>`;
+      }
+      else {
+        table += `<td colspan="60">${String(calender.startHour + j - 24).padStart(2, '0')}</td>`;
+      }
+    }
+    table += `</tr>`;
+  }
+
+  return table;
+}
+
+function generateEventSchedule(json) {
+  addArtistsToMainEvent(json);
+  calender.startHour = ~~(json.lifeSpan.startTime / 60);
+  if (json.lifeSpan.endTime % 60 > 0) {
+    calender.endHour = ~~(json.lifeSpan.endTime / 60) + 1;
+  } else {
+    calender.endHour = ~~(json.lifeSpan.endTime / 60);
+  }
+
+
+
+  calender.duration = calender.endHour - calender.startHour;
+  calender.startTime = calender.startHour * 60;
+  calender.endTime = calender.endHour * 60;
+  let table = `<h1>Event Schedule</h1>`;
+  table += `<table><col/>`;
+  for (let j = 0; j < calender.duration * 60; j++) {
+    table += `<col/>`;
+  }
+  table += `<tr><td colspan="100%"><b>${json.name}</b></td></tr>`;
+  let table2 = ""
+  let timeAlreadyAdded = false;
+  if (json.child.event.length > 0) {
+    const eventChild = json.child.event;
+    for (let i = 0; i < eventChild.length; i++) {
+      if (eventChild[i].child.event.length > 0) {
+        table2 += generateTimeHeader(calender, checkEventName(eventChild[i]))
+        timeAlreadyAdded = true;
+        const eventChild2 = eventChild[i].child.event;
+        for (let j = 0; j < eventChild2.length; j++) {
+          table2 += `<tr><td>${checkEventName(eventChild2[j])}</td>`;
+          if (eventChild2[j].child.artist.length > 0) {
+            const artistChild = eventChild2[j].child.artist.sort((a, b) => a.lifeSpan.startTime - b.lifeSpan.startTime);
+            table2 += addArtistStuffToSchedule(artistChild, calender);
+          }
+        }
+      } else {
+        table2 += `<tr><td>${checkEventName(eventChild[i])}</td>`;
+        if (eventChild[i].child.artist.length > 0) {
+          const artistChild = eventChild[i].child.artist.sort((a, b) => a.lifeSpan.startTime - b.lifeSpan.startTime);
+          table2 += addArtistStuffToSchedule(artistChild, calender);
+        }
+      }
+    }
+  } else {
+    table2 += `<tr><td>${checkEventName(json)}</td>`;
+    if (json.child.artist.length > 0) {
+      const artistChild = json.child.artist.sort((a, b) => a.lifeSpan.startTime - b.lifeSpan.startTime);
+      table2 += addArtistStuffToSchedule(artistChild, calender)
+    }
+  }
+  if (timeAlreadyAdded == false) {
+    table += generateTimeHeader(calender, "");
+  }
+  table += table2;
+  updateText("bottom1", table);
 }

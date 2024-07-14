@@ -3,3 +3,11 @@ tr,
 td {
   border: 1px solid black;
 }
+
+col {
+  width: 1px;
+}
+
+#instrument {
+  width: 15px;
+}
