@@ -701,7 +701,6 @@ function generateMemberInstrumentSchedule(json) {
   table += `</table>`;
   table += ``;
   updateText("bottom1", table);
-  
 }
 
 function addArtistsToMainEvent(json) {
