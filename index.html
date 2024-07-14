@@ -10,41 +10,45 @@
   <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 
-<body onload="favoriteArtists()">
+<body onload="load()">
   it's very slow because i can only request 1 thing per second.
   <table>
     <tr>
       <td>
-        <input type="checkbox" id="checkbox">
-        <button id="event" onclick="manualGet('event')">event</button>
-        <button id="user" onclick="manualGet('artist')">artist</button>
-        <button id="user" onclick="manualGet('series')">serie</button>
-        <input type="text" id="mbId">
+        <input type="checkbox" id="checkbox"><button id="event" onclick="manualGet('event')">event</button><button
+          id="user" onclick="manualGet('artist')">artist</button><input type="text" id="mbId">
       </td>
       <td>
         <- paste event mbId here to search </td>
     </tr>
     <tr>
-      <td id="first">
-        <div id="series"></div>
+      <td>
+        <div id="buttons"></div>
       </td>
       <td id="first">
         <div id="load"></div>
       </td>
     </tr>
     <tr>
+      <td></td>
+      <td><button id="move" onclick="move('right','left')"><- move</button></td>
+      <td><button id="move" onclick="move('right2','left')"><- move</button></td>
+    </tr>
+    <tr>
       <td>
-        <div id="events"></div>
+        <div id="left"></div>
       </td>
       <td>
-        <div id="events2"></div>
-
+        <div id="right"></div>
+      </td>
+      <td>
+        <div id="right2"></div>
       </td>
     </tr>
   </table>
-  <div id="container2"></div>
-  <div id="container3"></div>
-  <div id="container4"></div>
+  <div id="bottom1"></div>
+  <div id="bottom2"></div>
+  <div id="bottom3"></div>
 </body>
 
 </html>
