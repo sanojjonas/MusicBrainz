@@ -695,6 +695,8 @@ function generateMemberInstrumentSchedule(json) {
         table += `</tr>`;
       }
     }
+  } else {
+    table += `<tr><td colspan="100%">No Instruments yet</td></tr>`;
   }
   table += `</table>`;
   table += ``;
