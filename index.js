@@ -79,12 +79,16 @@ const user = {
   series: {
     liked: [
       {
-        name: "Rock Herk",
-        id: "d47425e5-2706-4b3d-91d6-dbd5abd08494"
-      },
-      {
         name: "Absolutely Free Festival",
         id: "62e32667-1bdc-497b-a859-17d9192d60b7"
+      },
+      {
+        name: "Pukkelpop",
+        id: "d578e8a2-2d72-43c2-b871-84eb44319b69"
+      },
+      {
+        name: "Rock Herk",
+        id: "d47425e5-2706-4b3d-91d6-dbd5abd08494"
       }
     ]
   }
@@ -93,10 +97,14 @@ const user = {
 let busy = false;
 let count = 0;
 
-const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay));
-
 function load() {
-  changeButtons("artist");
+  changeButtons("serie");
+}
+
+function manualGet(type) {
+  const mbId = document.getElementById("mbId").value;
+  const checkbox = document.getElementById("checkbox").checked;
+  grabStuff(type, mbId, checkbox);
 }
 
 function updateText(div, text) {
@@ -131,34 +139,58 @@ function move(from, to) {
 }
 
 function itemList(type, list, div) {
-  const sortedList = list.sort((a, b) => a.name.localeCompare(b.name));
-  let items = "";
+  let sortedList = []
+  sortedList = list.sort((a, b) => {
+    if (a.event && b.event) {
+      return b.event.length - a.event.length
+    } else {
+      return a.name.localeCompare(b.name);
+    }
+  })
+
+  let items = "<table>";
   for (let i = 0; i < sortedList.length; i++) {
-    items += `<button id="fetch" onclick="grabStuff('${type}','${sortedList[i].id}',false,'right')">fetch</button>`;
+    items += `<tr><td><button id="fetch" onclick="grabStuff('${type}','${sortedList[i].id}',false,'right')">fetch</button>`;
     items += `<button id="full" onclick="grabStuff('${type}','${sortedList[i].id}',true,'right')">full</button>`;
-    items += ` ${sortedList[i].name}<br>`;
+    items += ` ${sortedList[i].name}</td>`;
+    if (sortedList[i].event && sortedList[i].event.length > 0) {
+      items += `<td>`;
+      const event = sortedList[i].event;
+      for (let j = 0; j < event.length; j++) {
+        items += `${event[j].name} <br>`;
+      }
+      items += `</td>`;
+    }
+    items += `</tr>`;
   }
+  items += `</table>`;
   updateText(div, items);
 }
 
 async function fetchMusicBrainz(type, id, includes) {
-  const speed = 1000;
-  let musicbrainzUrl = "";
-  if (includes) {
-    musicbrainzUrl = `https://musicbrainz.org/ws/2/${type}/${id}?inc=aliases+${includes}&fmt=json`;
-  } else {
-    musicbrainzUrl = `https://musicbrainz.org/ws/2/${type}/${id}?inc=aliases+artist-rels+event-rels+place-rels&fmt=json`;
+  const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay));
+  try {
+    let musicbrainzUrl = "";
+    if (includes) {
+      musicbrainzUrl = `https://musicbrainz.org/ws/2/${type}/${id}?inc=aliases+${includes}&fmt=json`;
+    } else {
+      musicbrainzUrl = `https://musicbrainz.org/ws/2/${type}/${id}?inc=aliases+artist-rels+event-rels+place-rels&fmt=json`;
+    }
+    let data = await fetch(musicbrainzUrl);
+    await sleep(1000);
+    if (!data.ok) {
+      console.log(musicbrainzUrl);
+      throw new Error('woepsedaisy');
+    }
+    let json = await data.json()
+    count += 1;
+    updateText("load", count);
+    return json
   }
-  let data = await fetch(musicbrainzUrl);
-  await sleep(speed);
-  if (!data.ok) {
-    console.log(musicbrainzUrl);
-    throw new Error('woepsedaisy');
+  catch {
+    await sleep(5000);
+    fetchMusicBrainz(type, id, includes);
   }
-  let json = await data.json()
-  count += 1;
-  updateText("load", count);
-  return json
 }
 
 function checkLifeSpan(oldLifeSpan) {
@@ -259,7 +291,8 @@ function getValues(item) {
   } else {
     if (newItem['life-span']) {
       json.lifeSpan = checkLifeSpan(newItem['life-span'])
-    } else {
+    }
+    else if (item.begin) {
       json.lifeSpan = checkLifeSpan({
         begin: item.begin,
         end: item.end,
@@ -325,7 +358,8 @@ function sortItems(item, json) {
     }
     if ((relation[i].type == "founder"
       || relation[i].type == "member of band"
-      || relation[i].type == "instrumental supporting musician")
+      || relation[i].type == "instrumental supporting musician"
+      || relation[i].type == "is person")
       && relation[i].direction == "backward") {
       //child member
       if (relation[i]['source-credit'] != "") {
@@ -383,13 +417,18 @@ function sortItems(item, json) {
       //event parent (of other event)
       json.parent.event.push(itemValue);
     }
-    else if ((relation[i].type == "parts")
-      && relation[i].direction == "forward") {
-      //event child (of other event)
+    else if ((relation[i].type == "parts"
+      && relation[i].direction == "forward")
+      //event child of other event
+      || (relation[i].type == "part of"
+        && relation[i].direction == "backward")) {
+      //event child of series
       json.child.event.push(itemValue);
     }
     else if ((relation[i].type == "engineer position"
-      || relation[i].type == "held at")
+      || relation[i].type == "held at"
+      || relation[i].type == "studied at"
+      || relation[i].type == "teacher")
       && relation[i].direction == "forward") {
       //place parent
       json.parent.other.push(itemValue);
@@ -424,7 +463,21 @@ async function checkDeeper(type, json) {
         }
       }
       break;
+    case "series":
+      generateEventList(json, [], [], "series");
+      if (deeperJson.event.length > 0) {
+        for (let i = 0; i < deeperJson.event.length; i++) {
+          const event = deeperJson.event[i];
+          const eventItem = await fetchMusicBrainz("event", event.id)
+          deeperJson.event[i] = sortItems(eventItem, deeperJson.event[i]);
+          await checkDeeper("event", deeperJson.event[i]);
+          generateEventList(json, [], [], "series");
+        }
+      }
+      break;
     default:
+      console.log(type);
+      console.log(json);
       throw new Error("add more deeper checker");
   }
 }
@@ -452,6 +505,10 @@ async function grabStuff(type, id, full) {
           generateEventList(json, [], []);
           generateEventSchedule(json);
           break;
+        case "series":
+          await checkDeeper("series", json);
+          generateEventList(json, [], [], "series");
+          break;
         default:
           throw new Error("add extra full get stuff");
       }
@@ -462,6 +519,9 @@ async function grabStuff(type, id, full) {
           generateMemberInstrumentSchedule(json);
           break;
         case "event":
+          generateEventList(json, [], []);
+          break;
+        case "series":
           generateEventList(json, [], []);
           break;
         default:
@@ -506,23 +566,41 @@ function generateMemberArtistList(json) {
   itemList("artist", list, "right");
 }
 
-function generateEventList(json, eventList, artistList) {
+function generateEventList(json, eventList, artistList, type) {
   if (json.child.artist.length > 0) {
     const artistChild = json.child.artist;
     for (let j = 0; j < artistChild.length; j++) {
-      artistList.push({ name: artistChild[j].name, id: artistChild[j].id })
+      const double = artistList.findIndex(a => a.id === artistChild[j].id);
+      if (type === "series") {
+        if (double > -1) {
+          artistList[double].event.push({ name: json.name, id: json.id });
+        } else {
+          artistList.push({ name: artistChild[j].name, id: artistChild[j].id, event: [{ name: json.name, id: json.id }] })
+        }
+      } else {
+        artistList.push({ name: artistChild[j].name, id: artistChild[j].id })
+      }
+
     }
   }
   if (json.child.event.length > 0) {
     const eventChild = json.child.event;
     for (let i = 0; i < eventChild.length; i++) {
       eventList.push({ name: eventChild[i].name, id: eventChild[i].id });
-      generateEventList(eventChild[i], eventList, artistList);
+      generateEventList(eventChild[i], eventList, artistList, type);
     }
   }
-
-  itemList("event", eventList, "right");
-  itemList("artist", artistList, "right2");
+  if (type === undefined) {
+    itemList("event", eventList, "right");
+    itemList("artist", artistList, "right2");
+  } else
+    if (type === "series") {
+      itemList("event", eventList, "right");
+      itemList("series", artistList, "right2");
+    }
+    else {
+      throw new Error("incorrect list type");
+    }
 }
 
 function sortInstruments(json) {
@@ -885,15 +963,14 @@ function generateTimeHeader(calender, title) {
 
 function generateEventSchedule(json) {
   addArtistsToMainEvent(json);
+  console.log(json);
+  const calender = {}
   calender.startHour = ~~(json.lifeSpan.startTime / 60);
   if (json.lifeSpan.endTime % 60 > 0) {
     calender.endHour = ~~(json.lifeSpan.endTime / 60) + 1;
   } else {
     calender.endHour = ~~(json.lifeSpan.endTime / 60);
   }
-
-
-
   calender.duration = calender.endHour - calender.startHour;
   calender.startTime = calender.startHour * 60;
   calender.endTime = calender.endHour * 60;
