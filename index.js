@@ -154,8 +154,9 @@ function itemList(type, list, div) {
     items += `<button id="full" onclick="grabStuff('${type}','${sortedList[i].id}',true,'right')">full</button>`;
     items += ` ${sortedList[i].name}</td>`;
     if (sortedList[i].event && sortedList[i].event.length > 0) {
-      items += `<td>`;
       const event = sortedList[i].event;
+      items += `<td>${event.length}</td>`;
+      items += `<td>`;
       for (let j = 0; j < event.length; j++) {
         items += `${event[j].name} <br>`;
       }
@@ -188,6 +189,7 @@ async function fetchMusicBrainz(type, id, includes) {
     return json
   }
   catch {
+    console.log("error but try to continue after 5 seconds");
     await sleep(5000);
     fetchMusicBrainz(type, id, includes);
   }
